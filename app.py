@@ -1,10 +1,10 @@
 import streamlit as st
 import requests
-import streamlit.components.v1 as components
+import base64
 
 
 # =========================================================
-# إعداد التطبيق
+# إعداد الصفحة
 # =========================================================
 
 st.set_page_config(
@@ -34,15 +34,11 @@ h1 {
     text-align: center;
 }
 
-.description {
+.subtitle {
     text-align: center;
     font-size: 18px;
     color: #777;
-    margin-bottom: 25px;
-}
-
-.voice-button {
-    text-align: center;
+    margin-bottom: 30px;
 }
 
 </style>
@@ -56,8 +52,8 @@ h1 {
 st.title("🤖 المساعد التنفيذي الذكي")
 
 st.markdown(
-    '<div class="description">'
-    'احچي وياي، وأنا أساعدك بالتخطيط والقرارات وتنظيم شغلك.'
+    '<div class="subtitle">'
+    'احچي وياي، وأنا أفهمك وأجاوبك كتابة أو صوت.'
     '</div>',
     unsafe_allow_html=True
 )
@@ -75,176 +71,51 @@ except Exception:
 
     st.error("❌ مفتاح Groq غير موجود.")
 
-    st.info(
-        'روح إلى Secrets وأضف:\n\n'
-        'GROQ_API_KEY = "ضع مفتاحك الجديد هنا"'
+    st.code(
+        'GROQ_API_KEY = "ضع_المفتاح_الجديد_هنا"',
+        language="toml"
     )
 
     st.stop()
 
 
 # =========================================================
-# اختيار نوع الرد
+# إعدادات
 # =========================================================
 
-st.markdown("### 🎧 اختار طريقة الرد")
+CHAT_MODEL = "openai/gpt-oss-120b"
+
+STT_MODEL = "whisper-large-v3-turbo"
+
+TTS_MODEL = "canopylabs/orpheus-arabic-saudi"
+
+TTS_VOICE = "farah"
+
+
+# =========================================================
+# اختيار طريقة الرد
+# =========================================================
+
+st.markdown("### 🎧 طريقة رد المساعد")
 
 response_mode = st.radio(
-    "طريقة إجابة المساعد:",
+    "اختار:",
     [
-        "📝 جواب كتابي",
-        "🔊 جواب صوتي + كتابي"
+        "📝 كتابة فقط",
+        "🔊 صوت + كتابة"
     ],
     horizontal=True
 )
 
 
 # =========================================================
-# إدخال صوتي
+# تسجيل الصوت
 # =========================================================
 
 st.markdown("### 🎙️ احچي ويا المساعد")
 
-
-components.html(
-    """
-    <div style="
-        direction:rtl;
-        text-align:center;
-        padding:15px;
-    ">
-
-        <button
-            onclick="startListening()"
-            style="
-                background:#111;
-                color:white;
-                border:none;
-                border-radius:15px;
-                padding:18px 35px;
-                font-size:20px;
-                font-weight:bold;
-                cursor:pointer;
-            "
-        >
-            🎙️ اضغط هنا واحچي
-        </button>
-
-        <p id="status" style="
-            font-size:16px;
-            margin-top:15px;
-        ">
-            جاهز أسمعك
-        </p>
-
-        <textarea
-            id="voice_text"
-            placeholder="بعد ما تحچي، النص يظهر هنا..."
-            style="
-                width:100%;
-                height:100px;
-                padding:12px;
-                border-radius:12px;
-                border:1px solid #ccc;
-                font-size:17px;
-                direction:rtl;
-                box-sizing:border-box;
-            "
-        ></textarea>
-
-        <script>
-
-        function startListening() {
-
-            const SpeechRecognition =
-                window.SpeechRecognition ||
-                window.webkitSpeechRecognition;
-
-            if (!SpeechRecognition) {
-
-                document.getElementById("status").innerText =
-                    "❌ المتصفح لا يدعم المايكروفون. استخدم Google Chrome.";
-
-                return;
-            }
-
-            const recognition =
-                new SpeechRecognition();
-
-            recognition.lang = "ar-IQ";
-
-            recognition.continuous = false;
-
-            recognition.interimResults = false;
-
-
-            document.getElementById("status").innerText =
-                "🔴 أسمعك الآن... احچي";
-
-
-            recognition.start();
-
-
-            recognition.onresult =
-                function(event) {
-
-                    const text =
-                        event.results[0][0].transcript;
-
-                    document.getElementById("voice_text").value =
-                        text;
-
-                    document.getElementById("status").innerText =
-                        "✅ تم سماع كلامك";
-
-                };
-
-
-            recognition.onerror =
-                function(event) {
-
-                    document.getElementById("status").innerText =
-                        "❌ حدثت مشكلة: " +
-                        event.error;
-
-                };
-
-
-            recognition.onend =
-                function() {
-
-                    if (
-                        document
-                        .getElementById("status")
-                        .innerText
-                        .includes("أسمعك")
-                    ) {
-
-                        document.getElementById("status").innerText =
-                            "انتهى التسجيل";
-
-                    }
-
-                };
-
-        }
-
-        </script>
-
-    </div>
-    """,
-    height=280
-)
-
-
-# =========================================================
-# إدخال السؤال
-# =========================================================
-
-user_input = st.text_area(
-    "🗣️ الكلام الذي تم التقاطه:",
-    key="voice_question",
-    placeholder="اضغط على المايكروفون واحچي..."
+audio_file = st.audio_input(
+    "اضغط هنا وسجّل كلامك"
 )
 
 
@@ -252,158 +123,208 @@ user_input = st.text_area(
 # إرسال السؤال
 # =========================================================
 
-if st.button("🚀 اسأل المساعد"):
+if audio_file is not None:
 
-    if not user_input.strip():
+    st.audio(
+        audio_file,
+        format="audio/wav"
+    )
 
-        st.warning(
-            "⚠️ أولاً اضغط على المايكروفون واحچي."
-        )
+    if st.button(
+        "🚀 أرسل الكلام للمساعد",
+        use_container_width=True
+    ):
 
-    else:
+        with st.spinner("🎙️ دا أفهم كلامك..."):
 
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
+            try:
+
+                # =================================================
+                # تحويل الصوت إلى نص باستخدام Whisper
+                # =================================================
+
+                audio_bytes = audio_file.getvalue()
+
+                files = {
+                    "file": (
+                        "recording.wav",
+                        audio_bytes,
+                        "audio/wav"
+                    )
+                }
+
+                stt_data = {
+                    "model": STT_MODEL,
+                    "language": "ar",
+                    "response_format": "json",
+                    "temperature": 0
+                }
+
+                stt_headers = {
+                    "Authorization":
+                        f"Bearer {GROQ_API_KEY}"
+                }
+
+                transcription_response = requests.post(
+                    "https://api.groq.com/openai/v1/audio/transcriptions",
+                    headers=stt_headers,
+                    files=files,
+                    data=stt_data,
+                    timeout=60
+                )
+
+                transcription_response.raise_for_status()
+
+                transcription = transcription_response.json()
+
+                user_text = transcription.get(
+                    "text",
+                    ""
+                ).strip()
 
 
-        payload = {
+                # =================================================
+                # التأكد من وجود كلام
+                # =================================================
 
-            # =================================================
-            # الموديل الجديد
-            # =================================================
+                if not user_text:
 
-            "model": "openai/gpt-oss-120b",
+                    st.error(
+                        "❌ ما قدرت أتعرف على كلامك. "
+                        "حاول تحچي مرة ثانية."
+                    )
 
-            "messages": [
+                    st.stop()
 
-                {
-                    "role": "system",
 
-                    "content": """
+                # =================================================
+                # عرض ما فهمه المساعد
+                # =================================================
+
+                st.markdown("### 🗣️ كلامك")
+
+                st.info(user_text)
+
+
+                # =================================================
+                # إرسال الكلام إلى النموذج
+                # =================================================
+
+                with st.spinner(
+                    "🤖 دا أفكر بالجواب..."
+                ):
+
+                    chat_headers = {
+                        "Authorization":
+                            f"Bearer {GROQ_API_KEY}",
+
+                        "Content-Type":
+                            "application/json"
+                    }
+
+
+                    chat_payload = {
+
+                        "model": CHAT_MODEL,
+
+                        "messages": [
+
+                            {
+                                "role": "system",
+
+                                "content": """
 أنت مساعد تنفيذي ذكي ومحترف.
 
-المستخدم عراقي.
+المستخدم عراقي ويتحدث باللهجة العراقية.
 
 افهم اللهجة العراقية والكلمات العراقية
-والأسلوب العراقي في الكلام.
+والتعبيرات العراقية.
 
-إذا كان المستخدم يحچي باللهجة العراقية،
-جاوبه باللهجة العراقية بشكل طبيعي.
+أجب المستخدم باللغة العربية.
 
-كن واضحاً ومباشراً وعملياً.
+إذا كان مناسباً للسياق،
+استخدم اللهجة العراقية بشكل طبيعي.
+
+كن عملياً ومباشراً.
 
 ساعد المستخدم في:
 
-- إدارة الأعمال
+- الأعمال
 - التخطيط
+- إدارة الوقت
 - ترتيب الأولويات
 - تنظيم المهام
 - اتخاذ القرارات
-- إدارة الوقت
 - كتابة الرسائل
 - حل المشاكل
 - تطوير المشاريع
 - التفكير الاستراتيجي
 
-إذا طلب المستخدم خطة،
-اعطه خطة واضحة.
+إذا طلب خطة، قدم خطوات واضحة.
 
-إذا طلب رأيك،
-أعطه رأياً واضحاً مع السبب.
+إذا طلب رأياً، أعطه رأياً واضحاً
+مع السبب.
 
-لا تستخدم كلاماً روبوتياً.
+لا تستخدم أسلوباً روبوتياً.
 
 لا تطيل بدون داعٍ.
 """
-                },
+                            },
 
-                {
-                    "role": "user",
-                    "content": user_input
-                }
+                            {
+                                "role": "user",
+                                "content": user_text
+                            }
 
-            ],
+                        ],
 
-            "temperature": 0.7,
+                        "temperature": 0.7,
 
-            "max_tokens": 2000
-        }
-
-
-        # =================================================
-        # الاتصال بـ Groq
-        # =================================================
-
-        with st.spinner("🤖 دا أفكر..."):
-
-            try:
-
-                response = requests.post(
-
-                    "https://api.groq.com/openai/v1/chat/completions",
-
-                    headers=headers,
-
-                    json=payload,
-
-                    timeout=60
-                )
+                        "max_tokens": 1500
+                    }
 
 
-                # =================================================
-                # فحص الاستجابة
-                # =================================================
+                    chat_response = requests.post(
 
-                if response.status_code != 200:
+                        "https://api.groq.com/openai/v1/chat/completions",
 
-                    st.error(
-                        "❌ Groq رفض الطلب."
+                        headers=chat_headers,
+
+                        json=chat_payload,
+
+                        timeout=60
                     )
 
-                    try:
 
-                        st.json(
-                            response.json()
+                    chat_response.raise_for_status()
+
+                    chat_result = chat_response.json()
+
+
+                    # =================================================
+                    # استخراج الجواب
+                    # =================================================
+
+                    if "choices" not in chat_result:
+
+                        st.error(
+                            "❌ ما وصل جواب من المساعد."
                         )
 
-                    except Exception:
+                        st.json(chat_result)
 
-                        st.write(
-                            response.text
-                        )
-
-                    st.stop()
+                        st.stop()
 
 
-                data = response.json()
-
-
-                # =================================================
-                # استخراج الجواب
-                # =================================================
-
-                if "choices" not in data:
-
-                    st.error(
-                        "❌ لم يصل جواب من الذكاء الاصطناعي."
+                    answer = (
+                        chat_result["choices"][0]
+                        ["message"]
+                        ["content"]
                     )
 
-                    st.json(data)
-
-                    st.stop()
-
-
-                answer = (
-                    data["choices"][0]
-                    ["message"]
-                    ["content"]
-                )
-
 
                 # =================================================
-                # عرض الجواب
+                # عرض الجواب كتابة
                 # =================================================
 
                 st.markdown("### 🤖 جواب المساعد")
@@ -412,72 +333,109 @@ if st.button("🚀 اسأل المساعد"):
 
 
                 # =================================================
-                # إذا اختار المستخدم الصوت
+                # إذا اختار المستخدم الرد الصوتي
                 # =================================================
 
-                if response_mode == "🔊 جواب صوتي + كتابي":
+                if response_mode == "🔊 صوت + كتابة":
 
-                    # حماية النص من مشاكل JavaScript
-                    safe_answer = (
-                        answer
-                        .replace("\\", "\\\\")
-                        .replace("`", "\\`")
-                        .replace("${", "\\${")
-                    )
+                    with st.spinner(
+                        "🔊 دا أحول الجواب إلى صوت..."
+                    ):
 
+                        tts_headers = {
+                            "Authorization":
+                                f"Bearer {GROQ_API_KEY}",
 
-                    components.html(
-
-                        f"""
-                        <script>
-
-                        const text = `{safe_answer}`;
-
-                        const speech =
-                            new SpeechSynthesisUtterance(text);
-
-                        speech.lang = "ar-IQ";
-
-                        speech.rate = 0.9;
-
-                        speech.pitch = 1.0;
-
-                        window.speechSynthesis.cancel();
-
-                        window.speechSynthesis.speak(speech);
-
-                        </script>
-                        """,
-
-                        height=1
-                    )
+                            "Content-Type":
+                                "application/json"
+                        }
 
 
-                    st.info(
-                        "🔊 جاري قراءة الجواب بصوت..."
-                    )
+                        # موديل Orpheus العربي
+                        tts_payload = {
+
+                            "model": TTS_MODEL,
+
+                            "voice": TTS_VOICE,
+
+                            # الموديل العربي له حد إدخال 200 حرف
+                            "input": answer[:200],
+
+                            "response_format": "wav",
+
+                            "speed": 1.0
+                        }
 
 
-                else:
+                        tts_response = requests.post(
 
-                    st.info(
-                        "📝 تم اختيار الرد الكتابي."
-                    )
+                            "https://api.groq.com/openai/v1/audio/speech",
 
+                            headers=tts_headers,
+
+                            json=tts_payload,
+
+                            timeout=60
+                        )
+
+
+                        if tts_response.status_code != 200:
+
+                            st.error(
+                                "❌ فشل إنشاء الصوت."
+                            )
+
+                            try:
+                                st.json(
+                                    tts_response.json()
+                                )
+
+                            except Exception:
+                                st.write(
+                                    tts_response.text
+                                )
+
+                            st.stop()
+
+
+                        # =================================================
+                        # تشغيل الصوت
+                        # =================================================
+
+                        audio_bytes = (
+                            tts_response.content
+                        )
+
+
+                        st.markdown(
+                            "### 🔊 جواب المساعد الصوتي"
+                        )
+
+                        st.audio(
+                            audio_bytes,
+                            format="audio/wav",
+                            autoplay=True
+                        )
+
+
+            # =========================================================
+            # الأخطاء
+            # =========================================================
 
             except requests.exceptions.Timeout:
 
                 st.error(
-                    "⏱️ الاتصال أخذ وقت طويل. حاول مرة ثانية."
+                    "⏱️ الاتصال أخذ وقت طويل. "
+                    "حاول مرة ثانية."
                 )
 
-
-            except requests.exceptions.RequestException as e:
+            except requests.exceptions.HTTPError as e:
 
                 st.error(
-                    f"❌ مشكلة بالاتصال: {str(e)}"
+                    "❌ Groq رفض أحد الطلبات."
                 )
 
+                st.write(str(e))
 
             except Exception as e:
 
@@ -493,5 +451,5 @@ if st.button("🚀 اسأل المساعد"):
 st.divider()
 
 st.caption(
-    "🤖 المساعد التنفيذي الذكي — صوت وكتابة"
-        )
+    "🤖 Executive Assistant • Voice + Text"
+)
