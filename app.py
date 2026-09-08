@@ -39,7 +39,7 @@ h1 {
 
 .stButton > button {
     width: 100%;
-    border-radius: 10px;
+    border-radius: 12px;
     height: 48px;
     font-size: 17px;
     font-weight: bold;
@@ -64,16 +64,20 @@ st.markdown(
 
 
 # =========================================================
-# قراءة مفتاح Groq من Secrets
+# مفتاح Groq
 # =========================================================
 
 try:
     groq_api_key = st.secrets["GROQ_API_KEY"]
+
 except Exception:
+
     st.error(
         "❌ مفتاح Groq غير موجود.\n\n"
-        "أضفه داخل Streamlit Secrets باسم GROQ_API_KEY"
+        "اذهب إلى Secrets وأضف:\n\n"
+        "GROQ_API_KEY = \"مفتاحك هنا\""
     )
+
     st.stop()
 
 
@@ -86,42 +90,44 @@ if "messages" not in st.session_state:
 
 
 # =========================================================
-# عرض المحادثة السابقة
+# عرض المحادثة
 # =========================================================
 
 for message in st.session_state.messages:
 
     if message["role"] == "user":
+
         with st.chat_message("user"):
             st.write(message["content"])
 
     elif message["role"] == "assistant":
+
         with st.chat_message("assistant"):
             st.write(message["content"])
 
 
 # =========================================================
-# إدخال صوتي
+# المايكروفون
 # =========================================================
 
-st.markdown("### 🎙️ التحدث مع المساعد")
+st.markdown("### 🎙️ تحدث مع المساعد")
 
 components.html(
     """
     <div style="
-        direction: rtl;
-        text-align: center;
-        padding: 10px;
+        direction:rtl;
+        text-align:center;
+        padding:10px;
     ">
 
         <button
             onclick="startListening()"
             style="
-                background:#222;
+                background:#111;
                 color:white;
                 border:none;
                 border-radius:12px;
-                padding:14px 25px;
+                padding:15px 30px;
                 font-size:18px;
                 cursor:pointer;
             "
@@ -129,8 +135,8 @@ components.html(
             🎙️ اضغط وتكلم
         </button>
 
-        <p id="status" style="margin-top:12px;">
-            اضغط على الزر وتكلم باللهجة العراقية
+        <p id="status">
+            اضغط على الزر وتكلم
         </p>
 
         <textarea
@@ -142,8 +148,9 @@ components.html(
                 padding:12px;
                 border-radius:10px;
                 border:1px solid #ccc;
-                font-size:16px;
+                font-size:17px;
                 direction:rtl;
+                box-sizing:border-box;
             "
         ></textarea>
 
@@ -158,12 +165,13 @@ components.html(
             if (!SpeechRecognition) {
 
                 document.getElementById("status").innerText =
-                    "❌ المتصفح لا يدعم التعرف على الصوت. جرّب Google Chrome.";
+                    "❌ المتصفح لا يدعم التعرف على الصوت. استخدم Google Chrome.";
 
                 return;
             }
 
-            const recognition = new SpeechRecognition();
+            const recognition =
+                new SpeechRecognition();
 
             recognition.lang = "ar-IQ";
 
@@ -172,42 +180,52 @@ components.html(
             recognition.interimResults = false;
 
             document.getElementById("status").innerText =
-                "🎙️ أسمعك الآن... احچي براحتك";
+                "🎙️ أسمعك الآن... احچي";
 
             recognition.start();
 
-            recognition.onresult = function(event) {
 
-                const transcript =
-                    event.results[0][0].transcript;
+            recognition.onresult =
+                function(event) {
 
-                document.getElementById("result").value =
-                    transcript;
+                    const transcript =
+                        event.results[0][0].transcript;
 
-                document.getElementById("status").innerText =
-                    "✅ تم التعرف على الكلام";
+                    document.getElementById("result").value =
+                        transcript;
 
-            };
-
-            recognition.onerror = function(event) {
-
-                document.getElementById("status").innerText =
-                    "❌ حدث خطأ في المايكروفون: " +
-                    event.error;
-
-            };
-
-            recognition.onend = function() {
-
-                if (
-                    document.getElementById("status").innerText
-                    .includes("أسمعك")
-                ) {
                     document.getElementById("status").innerText =
-                        "انتهى التسجيل";
-                }
+                        "✅ تم تحويل صوتك إلى نص";
 
-            };
+                };
+
+
+            recognition.onerror =
+                function(event) {
+
+                    document.getElementById("status").innerText =
+                        "❌ مشكلة بالمايكروفون: " +
+                        event.error;
+
+                };
+
+
+            recognition.onend =
+                function() {
+
+                    if (
+                        document
+                        .getElementById("status")
+                        .innerText
+                        .includes("أسمعك")
+                    ) {
+
+                        document.getElementById("status").innerText =
+                            "انتهى التسجيل";
+
+                    }
+
+                };
 
         }
 
@@ -224,79 +242,93 @@ components.html(
 # =========================================================
 
 user_input = st.text_area(
-    "✍️ أو اكتب سؤالك هنا:",
+    "✍️ اكتب سؤالك:",
     placeholder="مثلاً: رتب لي مهامي اليوم حسب الأولوية...",
     height=120
 )
 
 
 # =========================================================
-# زر الإرسال
+# إرسال
 # =========================================================
 
-if st.button("🚀 إرسال إلى المساعد"):
+if st.button("🚀 إرسال"):
 
     if not user_input.strip():
 
-        st.warning("⚠️ اكتب سؤالًا أو استخدم المايكروفون أولاً.")
+        st.warning(
+            "⚠️ اكتب سؤالًا أو تحدث باستخدام المايكروفون أولاً."
+        )
 
     else:
 
-        # إضافة رسالة المستخدم
-        st.session_state.messages.append({
-            "role": "user",
-            "content": user_input
-        })
+        # إضافة سؤال المستخدم
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": user_input
+            }
+        )
 
-        # =================================================
-        # الاتصال بـ Groq
-        # =================================================
+
+        # =====================================================
+        # Groq
+        # =====================================================
 
         headers = {
             "Authorization": f"Bearer {groq_api_key}",
             "Content-Type": "application/json"
         }
 
+
         payload = {
 
-            "model": "llama-3.3-70b-versatile",
+            # الموديل الجديد
+            "model": "openai/gpt-oss-120b",
 
             "messages": [
 
                 {
                     "role": "system",
                     "content": """
-أنت مساعد تنفيذي ذكي ومحترف.
+أنت المساعد التنفيذي الذكي.
+
+أنت مساعد محترف وعملي يساعد المستخدم في:
+
+- إدارة الأعمال
+- التخطيط
+- ترتيب الأولويات
+- تنظيم المهام
+- اتخاذ القرارات
+- إدارة الوقت
+- كتابة الرسائل
+- تحليل المشاكل
+- تطوير المشاريع
+- التفكير الاستراتيجي
 
 تحدث باللغة العربية.
 
-عندما يتحدث المستخدم باللهجة العراقية،
-افهم اللهجة العراقية جيداً ورد عليه بطريقة
-طبيعية ومفهومة وقريبة من اللهجة العراقية.
+إذا تحدث المستخدم باللهجة العراقية،
+افهم اللهجة العراقية ورد عليه بأسلوب عراقي
+طبيعي ومفهوم.
 
-كن عملياً ومختصراً وواضحاً.
+لا تتكلم بطريقة روبوتية.
 
-ساعد المستخدم في:
-- التخطيط
-- تنظيم المهام
-- إدارة الوقت
-- اتخاذ القرارات
-- كتابة الرسائل
-- تحليل المشاكل
-- ترتيب الأولويات
-- تطوير الأعمال
-
-لا تستخدم لغة معقدة بدون داعٍ.
+كن واضحاً ومباشراً.
 
 إذا كان السؤال يحتاج خطوات،
-اعرضها بشكل مرتب ومرقم.
+استخدم قائمة مرقمة.
 
-إذا كان المستخدم عراقي ويتحدث باللهجة العراقية،
-يمكنك الرد باللهجة العراقية بشكل طبيعي.
+إذا كان المستخدم يريد قراراً،
+اعرض له الخيارات ثم أعطه توصية واضحة.
+
+لا تطيل الإجابة بدون سبب.
 """
                 }
 
-            ] + st.session_state.messages,
+            ]
+
+            + st.session_state.messages,
 
             "temperature": 0.7,
 
@@ -304,28 +336,33 @@ if st.button("🚀 إرسال إلى المساعد"):
         }
 
 
-        # =================================================
+        # =====================================================
         # إرسال الطلب
-        # =================================================
+        # =====================================================
 
         with st.spinner("🤖 المساعد يفكر..."):
 
             try:
 
                 response = requests.post(
+
                     "https://api.groq.com/openai/v1/chat/completions",
+
                     json=payload,
+
                     headers=headers,
+
                     timeout=60
                 )
 
-                # التأكد من نجاح الطلب
+
                 response.raise_for_status()
 
                 res_data = response.json()
 
+
                 # =================================================
-                # استخراج الرد
+                # الرد
                 # =================================================
 
                 if "choices" in res_data:
@@ -336,19 +373,24 @@ if st.button("🚀 إرسال إلى المساعد"):
                         ["content"]
                     )
 
+
                     # حفظ الرد
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": reply
-                    })
+                    st.session_state.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": reply
+                        }
+                    )
+
 
                     # عرض الرد
                     with st.chat_message("assistant"):
 
                         st.write(reply)
 
+
                     # =================================================
-                    # قراءة الرد صوتياً
+                    # تحويل الرد إلى صوت
                     # =================================================
 
                     safe_reply = (
@@ -358,7 +400,9 @@ if st.button("🚀 إرسال إلى المساعد"):
                         .replace("${", "\\${")
                     )
 
+
                     components.html(
+
                         f"""
                         <script>
 
@@ -366,11 +410,6 @@ if st.button("🚀 إرسال إلى المساعد"):
 
                         const utterance =
                             new SpeechSynthesisUtterance(text);
-
-                        /*
-                        العربية العراقية تعتمد على
-                        الأصوات العربية المتوفرة بالجهاز.
-                        */
 
                         utterance.lang = "ar-IQ";
 
@@ -386,16 +425,23 @@ if st.button("🚀 إرسال إلى المساعد"):
 
                         </script>
                         """,
+
                         height=0
                     )
+
 
                 else:
 
                     st.error(
-                        "❌ لم يصل رد صحيح من Groq:"
+                        "❌ لم يصل رد صحيح من Groq."
                     )
 
                     st.json(res_data)
+
+
+            # =====================================================
+            # أخطاء API
+            # =====================================================
 
             except requests.exceptions.HTTPError:
 
@@ -404,9 +450,17 @@ if st.button("🚀 إرسال إلى المساعد"):
                 )
 
                 try:
-                    st.json(response.json())
+
+                    st.json(
+                        response.json()
+                    )
+
                 except Exception:
-                    st.write(response.text)
+
+                    st.write(
+                        response.text
+                    )
+
 
             except requests.exceptions.Timeout:
 
@@ -415,10 +469,11 @@ if st.button("🚀 إرسال إلى المساعد"):
                     "حاول مرة ثانية."
                 )
 
+
             except Exception as e:
 
                 st.error(
-                    f"❌ حدث خطأ غير متوقع: {str(e)}"
+                    f"❌ حدث خطأ: {str(e)}"
                 )
 
 
