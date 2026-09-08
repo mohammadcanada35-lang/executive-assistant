@@ -1,10 +1,11 @@
 import streamlit as st
 import requests
-import azure.cognitiveservices.speech as speechsdk
+import html
+import base64
 
 
 # =========================================================
-# إعداد الصفحة
+# إعداد التطبيق
 # =========================================================
 
 st.set_page_config(
@@ -18,37 +19,25 @@ st.caption("🎤 احچي وياي • 🧠 أفهمك • 👩 أجاوبك ب�
 
 
 # =========================================================
-# قراءة المفاتيح من Streamlit Secrets
+# قراءة Secrets
 # =========================================================
 
-required_secrets = [
-    "GROQ_API_KEY",
-    "AZURE_SPEECH_KEY",
-    "AZURE_SPEECH_REGION",
-]
-
-missing_secrets = [
-    secret for secret in required_secrets
-    if secret not in st.secrets
-]
-
-if missing_secrets:
-    st.error("❌ التطبيق يحتاج إعداد المفاتيح.")
-    st.write("المفاتيح الناقصة:")
-
-    for secret in missing_secrets:
-        st.code(secret)
-
+try:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+    AZURE_SPEECH_KEY = st.secrets["AZURE_SPEECH_KEY"]
+    AZURE_SPEECH_REGION = st.secrets["AZURE_SPEECH_REGION"]
+except Exception:
+    st.error("❌ مفاتيح التطبيق غير مكتملة.")
     st.info(
-        "أضف هذه المفاتيح من Streamlit → Settings → Secrets."
+        "روح إلى Streamlit → Settings → Secrets "
+        "وتأكد من وجود المفاتيح الثلاثة."
     )
-
+    st.code(
+        'GROQ_API_KEY = "ضع_مفتاح_Groq_هنا"\n'
+        'AZURE_SPEECH_KEY = "ضع_مفتاح_Azure_هنا"\n'
+        'AZURE_SPEECH_REGION = "ضع_منطقة_Azure_هنا"'
+    )
     st.stop()
-
-
-GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-AZURE_SPEECH_KEY = st.secrets["AZURE_SPEECH_KEY"]
-AZURE_SPEECH_REGION = st.secrets["AZURE_SPEECH_REGION"]
 
 
 # =========================================================
@@ -58,40 +47,51 @@ AZURE_SPEECH_REGION = st.secrets["AZURE_SPEECH_REGION"]
 SYSTEM_PROMPT = """
 أنت مساعد تنفيذي ذكي ومحترف.
 
-أسلوبك:
-- تحدث باللغة العربية بشكل طبيعي.
-- إذا تحدث المستخدم باللهجة العراقية، جاوبه باللهجة العراقية.
-- استخدم أسلوب عراقي طبيعي وغير متكلف.
-- كن واضحاً ومباشراً.
-- لا تطيل بدون سبب.
-- إذا كان السؤال يحتاج خطوات، رتبها بشكل واضح.
-- إذا كان المستخدم يريد قراراً أو نصيحة، ساعده على اتخاذ قرار عملي.
-- لا تدّعي أنك نفذت شيئاً لم تنفذه فعلاً.
-- إذا لم تعرف معلومة، قل ذلك بصراحة.
-- تعامل مع المستخدم باحترام وهدوء.
-- لا تكرر كلام المستخدم بدون فائدة.
+تحدث مع المستخدم باللغة العربية.
 
-أنت مساعد شخصي تنفيذي هدفك مساعدة المستخدم في:
-التخطيط، العمل، الأفكار، الكتابة، التنظيم، اتخاذ القرارات،
-التسويق، العقارات، المشاريع، البرمجة، والتواصل.
+إذا كان المستخدم يتحدث باللهجة العراقية:
+- جاوبه باللهجة العراقية.
+- استخدم لغة طبيعية ومفهومة.
+- لا تستخدم لهجة مصطنعة أو مبالغاً فيها.
+
+أسلوبك:
+- واضح.
+- مباشر.
+- عملي.
+- ذكي.
+- محترم.
+- لا تطيل بدون داعٍ.
+
+إذا طلب المستخدم خطوات، أعطه خطوات مرتبة.
+إذا طلب رأياً، أعطه رأياً واضحاً مع السبب.
+إذا لم تعرف شيئاً، قل إنك لا تعرف ولا تخترع المعلومات.
+لا تدّعي أنك نفذت شيئاً لم تنفذه.
+
+أنت مساعد شخصي تنفيذي يساعد المستخدم في:
+العمل، المشاريع، العقارات، التسويق، الكتابة،
+التخطيط، اتخاذ القرارات، البرمجة والتنظيم.
 """
 
 
 # =========================================================
-# إنشاء المحادثة
+# ذاكرة المحادثة
 # =========================================================
 
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "system",
-            "content": SYSTEM_PROMPT,
+            "content": SYSTEM_PROMPT
         }
     ]
 
 
+if "last_audio_id" not in st.session_state:
+    st.session_state.last_audio_id = None
+
+
 # =========================================================
-# Groq - تحويل الصوت إلى نص
+# Groq Speech-to-Text
 # =========================================================
 
 def transcribe_audio(audio_file):
@@ -104,9 +104,9 @@ def transcribe_audio(audio_file):
 
     files = {
         "file": (
-            audio_file.name,
+            "recording.wav",
             audio_file.getvalue(),
-            audio_file.type or "audio/wav",
+            "audio/wav"
         )
     }
 
@@ -114,7 +114,7 @@ def transcribe_audio(audio_file):
         "model": "whisper-large-v3",
         "language": "ar",
         "response_format": "json",
-        "temperature": "0",
+        "temperature": "0"
     }
 
     response = requests.post(
@@ -122,13 +122,13 @@ def transcribe_audio(audio_file):
         headers=headers,
         files=files,
         data=data,
-        timeout=120,
+        timeout=120
     )
 
     if response.status_code != 200:
         raise Exception(
-            f"Groq Speech-to-Text Error: "
-            f"{response.status_code} - {response.text}"
+            f"Groq Speech Error {response.status_code}: "
+            f"{response.text}"
         )
 
     result = response.json()
@@ -136,13 +136,13 @@ def transcribe_audio(audio_file):
     text = result.get("text", "").strip()
 
     if not text:
-        raise Exception("ما قدرت أستخرج كلام واضح من التسجيل.")
+        raise Exception("ما قدرت أسمع كلام واضح بالتسجيل.")
 
     return text
 
 
 # =========================================================
-# Groq - المساعد الذكي
+# Groq AI
 # =========================================================
 
 def ask_groq():
@@ -151,88 +151,130 @@ def ask_groq():
 
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
+
+    # نرسل آخر 30 رسالة حتى لا تكبر المحادثة بلا حدود
+    messages = st.session_state.messages[-31:]
+
+    # نضمن بقاء تعليمات النظام
+    if messages[0]["role"] != "system":
+        messages.insert(
+            0,
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            }
+        )
 
     payload = {
         "model": "openai/gpt-oss-120b",
-        "messages": st.session_state.messages,
+        "messages": messages,
         "temperature": 0.7,
-        "max_tokens": 4000,
+        "max_tokens": 3000
     }
 
     response = requests.post(
         url,
         headers=headers,
         json=payload,
-        timeout=120,
+        timeout=120
     )
 
     if response.status_code != 200:
         raise Exception(
-            f"Groq Chat Error: "
-            f"{response.status_code} - {response.text}"
+            f"Groq AI Error {response.status_code}: "
+            f"{response.text}"
         )
 
     result = response.json()
 
     try:
         answer = result["choices"][0]["message"]["content"]
-    except (KeyError, IndexError):
-        raise Exception("Groq رجع استجابة غير متوقعة.")
+    except Exception:
+        raise Exception(
+            "Groq رجع استجابة غير مفهومة."
+        )
 
     return answer.strip()
 
 
 # =========================================================
-# Azure - تحويل النص إلى صوت عراقي أنثوي
+# Azure Text-to-Speech
+# بدون مكتبة Azure
 # =========================================================
 
 def text_to_iraqi_voice(text):
 
-    speech_config = speechsdk.SpeechConfig(
-        subscription=AZURE_SPEECH_KEY,
-        region=AZURE_SPEECH_REGION,
+    # نحذف HTML البسيط إذا وجد
+    clean_text = html.unescape(text)
+
+    # Azure Speech REST endpoint
+    url = (
+        f"https://{AZURE_SPEECH_REGION}.tts.speech.microsoft.com/"
+        "cognitiveservices/v1"
     )
 
-    # صوت أنثوي عربي عراقي
-    speech_config.speech_synthesis_voice_name = "ar-IQ-RanaNeural"
+    headers = {
+        "Ocp-Apim-Subscription-Key": AZURE_SPEECH_KEY,
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": "audio-24khz-160kbitrate-mono-mp3"
+    }
 
-    speech_config.set_speech_synthesis_output_format(
-        speechsdk.SpeechSynthesisOutputFormat.Audio24Khz160KBitRateMonoMp3
+    # نستخدم صوت بنت عراقي
+    ssml = f"""
+<speak version="1.0"
+       xmlns="http://www.w3.org/2001/10/synthesis"
+       xml:lang="ar-IQ">
+
+    <voice name="ar-IQ-RanaNeural">
+        <prosody rate="0%" pitch="0%">
+            {html.escape(clean_text)}
+        </prosody>
+    </voice>
+
+</speak>
+"""
+
+    response = requests.post(
+        url,
+        headers=headers,
+        data=ssml.encode("utf-8"),
+        timeout=120
     )
 
-    synthesizer = speechsdk.SpeechSynthesizer(
-        speech_config=speech_config,
-        audio_config=None,
-    )
-
-    result = synthesizer.speak_text_async(text).get()
-
-    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-
-        return result.audio_data
-
-    elif result.reason == speechsdk.ResultReason.Canceled:
-
-        cancellation = (
-            speechsdk.SpeechSynthesisCancellationDetails
-            .from_result(result)
-        )
-
-        details = cancellation.error_details or "سبب غير معروف"
+    if response.status_code != 200:
 
         raise Exception(
-            f"تعذر إنشاء الصوت العراقي: {details}"
+            f"Azure Speech Error {response.status_code}: "
+            f"{response.text}"
         )
 
-    else:
-
-        raise Exception("تعذر إنشاء الرد الصوتي.")
+    return response.content
 
 
 # =========================================================
-# عرض المحادثة السابقة
+# تشغيل الصوت داخل الصفحة
+# =========================================================
+
+def play_audio(audio_bytes):
+
+    encoded = base64.b64encode(audio_bytes).decode()
+
+    audio_html = f"""
+    <audio controls autoplay style="width:100%;">
+        <source src="data:audio/mp3;base64,{encoded}" type="audio/mpeg">
+    </audio>
+    """
+
+    st.markdown(
+        audio_html,
+        unsafe_allow_html=True
+    )
+
+
+# =========================================================
+# عرض المحادثة
 # =========================================================
 
 for message in st.session_state.messages:
@@ -245,76 +287,83 @@ for message in st.session_state.messages:
 
 
 # =========================================================
-# التسجيل الصوتي
+# 🎤 الصوت
 # =========================================================
 
 st.subheader("🎤 احچي وياي")
 
 audio_value = st.audio_input(
-    "اضغط هنا وسجل كلامك",
+    "اضغط وسجل كلامك",
     sample_rate=16000,
+    key="voice_recorder"
 )
 
 
 if audio_value is not None:
 
-    audio_id = hash(audio_value.getvalue())
+    current_audio_id = hash(audio_value.getvalue())
 
-    # منع معالجة نفس التسجيل أكثر من مرة
-    if st.session_state.get("last_audio_id") != audio_id:
+    if st.session_state.last_audio_id != current_audio_id:
 
-        st.session_state.last_audio_id = audio_id
+        st.session_state.last_audio_id = current_audio_id
 
         try:
+
+            # ---------------------------------------------
+            # تحويل الصوت إلى نص
+            # ---------------------------------------------
 
             with st.spinner("🎧 دا أسمعك..."):
 
                 user_text = transcribe_audio(audio_value)
 
-            # عرض كلام المستخدم
             with st.chat_message("user"):
                 st.markdown(user_text)
 
             st.session_state.messages.append(
                 {
                     "role": "user",
-                    "content": user_text,
+                    "content": user_text
                 }
             )
 
-            with st.spinner("🧠 دا أفكر..."):
-
-                reply = ask_groq()
-
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": reply,
-                }
-            )
+            # ---------------------------------------------
+            # الذكاء الاصطناعي
+            # ---------------------------------------------
 
             with st.chat_message("assistant"):
 
+                with st.spinner("🧠 دا أفكر..."):
+
+                    reply = ask_groq()
+
                 st.markdown(reply)
 
-                with st.spinner("👩 دا أحچي وياك..."):
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": reply
+                    }
+                )
+
+                # -----------------------------------------
+                # الصوت العراقي
+                # -----------------------------------------
+
+                with st.spinner("👩 دا أحول الجواب إلى صوت..."):
 
                     audio_bytes = text_to_iraqi_voice(reply)
 
-                st.audio(
-                    audio_bytes,
-                    format="audio/mp3",
-                    autoplay=True,
-                )
+                play_audio(audio_bytes)
 
         except Exception as error:
 
-            st.error("❌ صار خطأ:")
+            st.error("❌ صار خطأ أثناء معالجة التسجيل.")
             st.code(str(error))
 
 
 # =========================================================
-# الكتابة
+# ⌨️ الكتابة
 # =========================================================
 
 st.divider()
@@ -336,7 +385,7 @@ if text_input:
         st.session_state.messages.append(
             {
                 "role": "user",
-                "content": text_input,
+                "content": text_input
             }
         )
 
@@ -351,7 +400,7 @@ if text_input:
             st.session_state.messages.append(
                 {
                     "role": "assistant",
-                    "content": reply,
+                    "content": reply
                 }
             )
 
@@ -359,33 +408,29 @@ if text_input:
 
                 audio_bytes = text_to_iraqi_voice(reply)
 
-            st.audio(
-                audio_bytes,
-                format="audio/mp3",
-                autoplay=True,
-            )
+            play_audio(audio_bytes)
 
     except Exception as error:
 
-        st.error("❌ صار خطأ:")
+        st.error("❌ صار خطأ.")
         st.code(str(error))
 
 
 # =========================================================
-# مسح المحادثة
+# 🗑️ مسح المحادثة
 # =========================================================
 
 st.divider()
 
 if st.button(
     "🗑️ مسح المحادثة",
-    use_container_width=True,
+    use_container_width=True
 ):
 
     st.session_state.messages = [
         {
             "role": "system",
-            "content": SYSTEM_PROMPT,
+            "content": SYSTEM_PROMPT
         }
     ]
 
