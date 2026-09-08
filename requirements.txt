@@ -1,2 +1,2 @@
-streamlit
-requests
+streamlit livekit livekit-api
+livekit-agents livekit-plugins-groq
