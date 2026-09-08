@@ -5,7 +5,8 @@ import requests
 app = Flask(__name__)
 
 # مفتاح Groq المجاني (راح نخليه بمتغير بيئي أو تخلينه هنا مؤقتاً للتجربة)
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "خلي_مفتاح_كروك_هنا")
+GROQ_API_KEY = "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"
+
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
