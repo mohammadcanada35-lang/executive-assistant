@@ -1,5 +1,6 @@
 import os
 import uuid
+
 import streamlit as st
 import streamlit.components.v1 as components
 from livekit import api
@@ -13,10 +14,6 @@ st.set_page_config(
 st.title("🤖 AI Executive Assistant")
 st.write("المساعد التنفيذي الصوتي")
 
-
-# =========================
-# LiveKit settings
-# =========================
 
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
@@ -41,14 +38,10 @@ if not LIVEKIT_API_SECRET:
 st.success("إعدادات LiveKit جاهزة ✅")
 
 
-# =========================
-# Start voice assistant
-# =========================
-
 if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
 
-    # غرفة جديدة لكل جلسة
-    room_name = f"executive-{uuid.uuid4().hex[:12]}"
+    room_name = "executive-" + uuid.uuid4().hex[:12]
+    identity = "user-" + uuid.uuid4().hex[:8]
 
     try:
         token = (
@@ -56,7 +49,7 @@ if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
                 LIVEKIT_API_KEY,
                 LIVEKIT_API_SECRET,
             )
-            .with_identity(f"user-{uuid.uuid4().hex[:8]}")
+            .with_identity(identity)
             .with_name("User")
             .with_grants(
                 api.VideoGrants(
@@ -76,115 +69,143 @@ if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
             .to_jwt()
         )
 
-        st.success("جاري تشغيل المساعد الصوتي... 🎙️")
-
-        # واجهة LiveKit داخل التطبيق
-        html = f"""
+        html = """
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
+
             <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 
             <style>
-                body {{
+                body {
                     margin: 0;
+                    padding: 20px;
                     font-family: Arial, sans-serif;
-                    background: transparent;
                     text-align: center;
-                }}
+                }
 
-                button {{
+                button {
                     background: #111827;
                     color: white;
                     border: none;
-                    padding: 14px 24px;
+                    padding: 14px 25px;
                     border-radius: 10px;
-                    font-size: 16px;
+                    font-size: 17px;
                     cursor: pointer;
-                }}
+                }
 
-                #status {{
-                    margin: 15px;
+                button:disabled {
+                    opacity: 0.6;
+                }
+
+                #status {
+                    margin-top: 15px;
                     font-size: 16px;
-                }}
+                }
             </style>
         </head>
 
         <body>
 
-            <button id="start">🎙️ ابدأ المحادثة</button>
+            <button id="start">
+                🎙️ ابدأ المحادثة
+            </button>
 
-            <div id="status">اضغط الزر واسمح للمايكروفون</div>
+            <div id="status">
+                اضغط الزر لبدء المحادثة
+            </div>
 
             <script>
-                const LIVEKIT_URL = "{LIVEKIT_URL}";
-                const TOKEN = "{token}";
+
+                const LIVEKIT_URL = "__LIVEKIT_URL__";
+                const TOKEN = "__TOKEN__";
 
                 let room = null;
 
                 const button = document.getElementById("start");
                 const status = document.getElementById("status");
 
-                button.onclick = async function() {{
+                button.onclick = async function () {
 
-                    try {{
+                    try {
 
                         button.disabled = true;
+
                         status.innerText = "جاري الاتصال...";
 
                         room = new LivekitClient.Room();
 
                         room.on(
                             LivekitClient.RoomEvent.TrackSubscribed,
-                            (track) => {{
+                            function(track) {
 
-                                if (track.kind === LivekitClient.Track.Kind.Audio) {{
-                                    const element = track.attach();
-                                    document.body.appendChild(element);
-                                    element.autoplay = true;
-                                }}
+                                if (
+                                    track.kind ===
+                                    LivekitClient.Track.Kind.Audio
+                                ) {
+                                    const audio = track.attach();
+                                    document.body.appendChild(audio);
+                                    audio.autoplay = true;
+                                }
 
-                            }}
+                            }
                         );
 
                         room.on(
                             LivekitClient.RoomEvent.Disconnected,
-                            () => {{
-                                status.innerText = "تم إنهاء الاتصال";
+                            function() {
+                                status.innerText =
+                                    "تم إنهاء الاتصال";
                                 button.disabled = false;
-                            }}
+                            }
                         );
 
-                        await room.connect(LIVEKIT_URL, TOKEN);
+                        await room.connect(
+                            LIVEKIT_URL,
+                            TOKEN
+                        );
 
-                        await room.startAudio();
+                        await room.localParticipant.setMicrophoneEnabled(
+                            true
+                        );
 
-                        await room.localParticipant.setMicrophoneEnabled(true);
+                        status.innerText =
+                            "🟢 متصل — احچي ويا المساعد الآن";
 
-                        status.innerText = "🟢 متصل — احچي ويا المساعد الآن";
-
-                    }} catch (error) {{
+                    } catch (error) {
 
                         console.error(error);
 
                         status.innerText =
-                            "❌ حدث خطأ: " + error.message;
+                            "❌ حدث خطأ أثناء الاتصال";
 
                         button.disabled = false;
-                    }}
-                }};
+                    }
+                };
+
             </script>
 
         </body>
         </html>
         """
 
+        html = html.replace(
+            "__LIVEKIT_URL__",
+            LIVEKIT_URL,
+        )
+
+        html = html.replace(
+            "__TOKEN__",
+            token,
+        )
+
         components.html(
             html,
-            height=180,
+            height=220,
             scrolling=False,
         )
 
     except Exception as e:
-        st.error(f"حدث
+        st.error("حدث خطأ أثناء إنشاء الاتصال")
+        st.code(str(e))
