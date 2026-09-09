@@ -1,2 +1,5 @@
-streamlit livekit livekit-api
-livekit-agents livekit-plugins-groq
+streamlit
+livekit
+livekit-api
+livekit-agents
+livekit-plugins-groq
