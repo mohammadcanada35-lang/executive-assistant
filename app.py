@@ -7,13 +7,69 @@ from livekit import api
 
 
 st.set_page_config(
-    page_title="AI Executive Assistant",
+    page_title="المساعد التنفيذي الذكي",
     page_icon="🤖",
+    layout="centered",
 )
 
-st.title("🤖 AI Executive Assistant")
-st.write("المساعد التنفيذي الصوتي")
+# =========================
+# التصميم
+# =========================
 
+st.markdown(
+    """
+    <style>
+    .main-title {
+        text-align: center;
+        font-size: 38px;
+        font-weight: 700;
+        margin-top: 20px;
+        margin-bottom: 5px;
+    }
+
+    .subtitle {
+        text-align: center;
+        font-size: 18px;
+        color: #777;
+        margin-bottom: 35px;
+    }
+
+    .assistant-card {
+        padding: 30px;
+        border-radius: 20px;
+        border: 1px solid #ddd;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    '<div class="main-title">🤖 المساعد التنفيذي الذكي</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    '<div class="subtitle">فكّر بوضوح • تواصل بثقة • حافظ على الزخم</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="assistant-card">
+        <h2>🎙️ مساعدك الصوتي</h2>
+        <p>اضغط على الزر وابدأ المحادثة مع مساعدك التنفيذي.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# =========================
+# إعدادات LiveKit
+# =========================
 
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
@@ -35,15 +91,21 @@ if not LIVEKIT_API_SECRET:
     st.stop()
 
 
-st.success("إعدادات LiveKit جاهزة ✅")
+# =========================
+# تشغيل المساعد
+# =========================
 
-
-if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
+if st.button(
+    "🎙️ تشغيل المساعد الصوتي",
+    type="primary",
+    use_container_width=True,
+):
 
     room_name = "executive-" + uuid.uuid4().hex[:12]
     identity = "user-" + uuid.uuid4().hex[:8]
 
     try:
+
         token = (
             api.AccessToken(
                 LIVEKIT_API_KEY,
@@ -78,31 +140,39 @@ if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
             <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 
             <style>
+
                 body {
                     margin: 0;
-                    padding: 20px;
+                    padding: 10px;
                     font-family: Arial, sans-serif;
                     text-align: center;
+                    background: transparent;
                 }
 
-                button {
+                #start {
+                    width: 100%;
+                    max-width: 420px;
+                    padding: 18px;
+                    border: none;
+                    border-radius: 14px;
                     background: #111827;
                     color: white;
-                    border: none;
-                    padding: 14px 25px;
-                    border-radius: 10px;
-                    font-size: 17px;
+                    font-size: 18px;
+                    font-weight: bold;
                     cursor: pointer;
                 }
 
-                button:disabled {
+                #start:disabled {
                     opacity: 0.6;
+                    cursor: not-allowed;
                 }
 
                 #status {
-                    margin-top: 15px;
-                    font-size: 16px;
+                    margin-top: 18px;
+                    font-size: 17px;
+                    font-weight: 600;
                 }
+
             </style>
         </head>
 
@@ -113,7 +183,7 @@ if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
             </button>
 
             <div id="status">
-                اضغط الزر لبدء المحادثة
+                جاهز للمحادثة
             </div>
 
             <script>
@@ -132,7 +202,7 @@ if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
 
                         button.disabled = true;
 
-                        status.innerText = "جاري الاتصال...";
+                        status.innerText = "🔄 جاري الاتصال...";
 
                         room = new LivekitClient.Room();
 
@@ -144,19 +214,23 @@ if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
                                     track.kind ===
                                     LivekitClient.Track.Kind.Audio
                                 ) {
-                                    const audio = track.attach();
-                                    document.body.appendChild(audio);
-                                    audio.autoplay = true;
-                                }
 
+                                    const audio = track.attach();
+
+                                    audio.autoplay = true;
+
+                                    document.body.appendChild(audio);
+                                }
                             }
                         );
 
                         room.on(
                             LivekitClient.RoomEvent.Disconnected,
                             function() {
+
                                 status.innerText =
-                                    "تم إنهاء الاتصال";
+                                    "🔴 تم إنهاء المحادثة";
+
                                 button.disabled = false;
                             }
                         );
@@ -178,7 +252,7 @@ if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
                         console.error(error);
 
                         status.innerText =
-                            "❌ حدث خطأ أثناء الاتصال";
+                            "❌ تعذر الاتصال بالمساعد";
 
                         button.disabled = false;
                     }
@@ -202,10 +276,19 @@ if st.button("🎙️ تشغيل المساعد الصوتي", type="primary"):
 
         components.html(
             html,
-            height=220,
+            height=180,
             scrolling=False,
         )
 
     except Exception as e:
-        st.error("حدث خطأ أثناء إنشاء الاتصال")
+
+        st.error("حدث خطأ أثناء تشغيل المساعد")
+
         st.code(str(e))
+
+
+st.markdown("---")
+
+st.caption(
+    "المساعد التنفيذي الذكي • يعمل بالصوت عبر LiveKit"
+        )
