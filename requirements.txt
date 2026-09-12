@@ -1,2 +1,6 @@
 streamlit
 google-genai
+streamlit-webrtc
+av
+numpy
+scipy
