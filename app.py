@@ -41,7 +41,7 @@ GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 # نموذج Gemini Live الحالي
 # =========================================================
 
-MODEL = "gemini-3.1-flash-live-preview"
+MODEL = "models/gemini-2.5-flash-native-audio-latest"
 
 
 # =========================================================
@@ -427,4 +427,4 @@ if st.session_state.gemini_error:
 
     st.code(
         st.session_state.gemini_error
-        )
+    )
