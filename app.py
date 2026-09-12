@@ -7,7 +7,7 @@ st.set_page_config(
     page_icon="📧"
 )
 
-# قراءة تعليمات المساعد من ملف system_prompt.md
+# قراءة تعليمات المساعد
 with open("system_prompt.md", "r", encoding="utf-8") as f:
     system_prompt = f.read()
 
@@ -16,9 +16,9 @@ genai.configure(
     api_key=st.secrets["GEMINI_API_KEY"]
 )
 
-# إنشاء النموذج
+# إنشاء نموذج Gemini
 model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
+    model_name="gemini-3.6-flash",
     system_instruction=system_prompt
 )
 
@@ -38,11 +38,11 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# مربع إدخال المستخدم
+# إدخال المستخدم
 user_input = st.chat_input("اكتب رسالتك هنا...")
 
 if user_input:
-    # إضافة رسالة المستخدم
+    # حفظ رسالة المستخدم
     st.session_state.messages.append({
         "role": "user",
         "content": user_input
@@ -57,12 +57,13 @@ if user_input:
         with st.spinner("جاري التفكير..."):
             try:
                 response = st.session_state.chat.send_message(user_input)
+
                 assistant_reply = response.text
 
-                # عرض رد المساعد
+                # عرض الرد
                 st.write(assistant_reply)
 
-                # حفظ رد المساعد
+                # حفظ الرد
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": assistant_reply
