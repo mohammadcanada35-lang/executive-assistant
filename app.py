@@ -1,7 +1,6 @@
 import asyncio
 import queue
 import threading
-import time
 
 import av
 import numpy as np
@@ -12,9 +11,9 @@ from google import genai
 from google.genai import types
 
 
-# =========================
+# =========================================================
 # إعداد الصفحة
-# =========================
+# =========================================================
 
 st.set_page_config(
     page_title="المساعد التنفيذي",
@@ -26,126 +25,272 @@ st.title("📞 المساعد التنفيذي")
 st.caption("مكالمة صوتية مباشرة مع Gemini")
 
 
-# =========================
-# قراءة التعليمات
-# =========================
+# =========================================================
+# System Prompt
+# =========================================================
 
 try:
     with open("system_prompt.md", "r", encoding="utf-8") as f:
-        system_prompt = f.read()
+        SYSTEM_PROMPT = f.read()
 except FileNotFoundError:
-    system_prompt = """
+    SYSTEM_PROMPT = """
 أنت مساعد تنفيذي شخصي محترف.
-تحدث باللغة العربية.
-استخدم اللهجة العراقية بشكل طبيعي عندما تتحدث مع المستخدم.
-كن واضحاً ومختصراً وودوداً.
+
+تحدث مع المستخدم باللغة العربية.
+استخدم اللهجة العراقية بشكل طبيعي وواضح عندما تتحدث معه.
+لا تتكلم بالفصحى الرسمية إلا إذا طلب المستخدم ذلك.
+
+تكلم بطريقة طبيعية كأنها مكالمة هاتفية.
+لا تطيل في الردود.
+لا تكرر كلام المستخدم.
+استمع جيداً قبل الرد.
+
 لا تنفذ أي إجراء حساس أو مهم بدون موافقة المستخدم.
 """
 
 
-# =========================
-# مفتاح Gemini
-# =========================
+# =========================================================
+# Gemini API
+# =========================================================
 
 if "GEMINI_API_KEY" not in st.secrets:
-    st.error("لم يتم العثور على GEMINI_API_KEY في Streamlit Secrets.")
+    st.error("GEMINI_API_KEY غير موجود في Streamlit Secrets.")
     st.stop()
 
-API_KEY = st.secrets["GEMINI_API_KEY"]
-
-
-# =========================
-# إعداد Gemini Live
-# =========================
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 MODEL = "gemini-3.1-flash-live-preview"
 
 
-# =========================
+# =========================================================
 # طوابير الصوت
-# =========================
+# =========================================================
 
-audio_to_gemini = queue.Queue(maxsize=100)
-audio_from_gemini = queue.Queue(maxsize=200)
-
-stop_event = threading.Event()
+MIC_QUEUE = queue.Queue(maxsize=200)
+SPEAKER_QUEUE = queue.Queue(maxsize=500)
 
 
-# =========================
-# تحويل الصوت إلى 16kHz
-# =========================
+# =========================================================
+# حالة الاتصال
+# =========================================================
 
-def convert_to_16khz(frame):
-    """
-    يحول صوت المتصفح إلى PCM 16-bit / 16kHz.
-    """
+if "gemini_started" not in st.session_state:
+    st.session_state.gemini_started = False
+
+if "gemini_error" not in st.session_state:
+    st.session_state.gemini_error = None
+
+
+# =========================================================
+# تحويل صوت المايك إلى PCM 16kHz
+# =========================================================
+
+def microphone_to_pcm(frame):
 
     audio = frame.to_ndarray()
 
-    # إذا كان الصوت متعدد القنوات
+    # تحويل Stereo إلى Mono
     if audio.ndim > 1:
         audio = np.mean(audio, axis=0)
 
     audio = audio.astype(np.float32)
 
-    input_rate = frame.sample_rate
+    # الحصول على sample rate
+    sample_rate = frame.sample_rate
 
-    if input_rate != 16000:
+    # Gemini Live يحتاج 16kHz
+    if sample_rate != 16000:
         audio = resample_poly(
             audio,
             16000,
-            input_rate
+            sample_rate
         )
 
+    # تحويل إلى PCM 16-bit
     audio = np.clip(audio, -32768, 32767)
 
     return audio.astype(np.int16).tobytes()
 
 
-# =========================
-# معالج المايك
-# =========================
+# =========================================================
+# Audio Processor
+# =========================================================
 
-class AudioProcessor(AudioProcessorBase):
+class GeminiAudioProcessor(AudioProcessorBase):
 
     def recv(self, frame):
 
         try:
-            pcm_data = convert_to_16khz(frame)
 
-            if not audio_to_gemini.full():
-                audio_to_gemini.put_nowait(pcm_data)
+            # -----------------------------
+            # إرسال صوت المستخدم إلى Gemini
+            # -----------------------------
+
+            pcm = microphone_to_pcm(frame)
+
+            if not MIC_QUEUE.full():
+                MIC_QUEUE.put_nowait(pcm)
 
         except Exception:
             pass
 
-        # لا نرجع صوت المايك للسماعة
-        return frame
+
+        # =================================================
+        # تشغيل صوت Gemini في السماعة
+        # =================================================
+
+        try:
+
+            if not SPEAKER_QUEUE.empty():
+
+                data = SPEAKER_QUEUE.get_nowait()
+
+                samples = np.frombuffer(
+                    data,
+                    dtype=np.int16
+                )
+
+                # Gemini يخرج 24kHz
+                samples = samples.astype(np.int16)
+
+                # AudioFrame يحتاج shape = channels x samples
+                samples = samples.reshape(1, -1)
+
+                output_frame = av.AudioFrame.from_ndarray(
+                    samples,
+                    format="s16",
+                    layout="mono"
+                )
+
+                output_frame.sample_rate = 24000
+
+                return output_frame
+
+        except Exception:
+            pass
 
 
-# =========================
-# تشغيل Gemini Live
-# =========================
+        # =================================================
+        # إذا ماكو رد من Gemini
+        # نرجع صمت حتى تستمر المكالمة
+        # =================================================
 
-def gemini_worker():
+        try:
+
+            sample_count = int(
+                24000 * 0.02
+            )
+
+            silence = np.zeros(
+                (1, sample_count),
+                dtype=np.int16
+            )
+
+            output_frame = av.AudioFrame.from_ndarray(
+                silence,
+                format="s16",
+                layout="mono"
+            )
+
+            output_frame.sample_rate = 24000
+
+            return output_frame
+
+        except Exception:
+            return frame
+
+
+# =========================================================
+# Gemini Live Worker
+# =========================================================
+
+def start_gemini():
+
+    async def send_audio(session):
+
+        while True:
+
+            try:
+
+                audio_data = await asyncio.to_thread(
+                    MIC_QUEUE.get
+                )
+
+                await session.send_realtime_input(
+                    audio=types.Blob(
+                        data=audio_data,
+                        mime_type="audio/pcm;rate=16000"
+                    )
+                )
+
+            except Exception:
+                break
+
+
+    async def receive_audio(session):
+
+        try:
+
+            async for response in session.receive():
+
+                if not response.server_content:
+                    continue
+
+                if not response.server_content.model_turn:
+                    continue
+
+                for part in response.server_content.model_turn.parts:
+
+                    if not part.inline_data:
+                        continue
+
+                    audio_data = part.inline_data.data
+
+                    if not audio_data:
+                        continue
+
+                    try:
+
+                        SPEAKER_QUEUE.put_nowait(
+                            audio_data
+                        )
+
+                    except queue.Full:
+                        pass
+
+        except Exception as e:
+
+            st.session_state.gemini_error = str(e)
+
 
     async def run():
 
         client = genai.Client(
-            api_key=API_KEY
+            api_key=GEMINI_API_KEY
         )
 
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
+
             system_instruction=types.Content(
                 parts=[
                     types.Part(
-                        text=system_prompt
+                        text=SYSTEM_PROMPT
                     )
                 ]
             ),
+
             input_audio_transcription={},
+
             output_audio_transcription={},
+
+            speech_config={
+                "voice_config": {
+                    "prebuilt_voice_config": {
+                        "voice_name": "Kore"
+                    }
+                }
+            },
         )
 
         try:
@@ -155,99 +300,53 @@ def gemini_worker():
                 config=config
             ) as session:
 
-                while not stop_event.is_set():
+                st.session_state.gemini_started = True
 
-                    try:
-                        pcm_data = audio_to_gemini.get(
-                            timeout=0.05
-                        )
-                    except queue.Empty:
-                        await asyncio.sleep(0.01)
-                        continue
+                sender = asyncio.create_task(
+                    send_audio(session)
+                )
 
-                    await session.send_realtime_input(
-                        audio=types.Blob(
-                            data=pcm_data,
-                            mime_type="audio/pcm;rate=16000"
-                        )
-                    )
+                receiver = asyncio.create_task(
+                    receive_audio(session)
+                )
 
-                    # استقبال الرد الصوتي
-                    try:
-
-                        while True:
-
-                            response = await asyncio.wait_for(
-                                session.receive().__anext__(),
-                                timeout=0.01
-                            )
-
-                            if (
-                                response.server_content
-                                and response.server_content.model_turn
-                            ):
-
-                                for part in response.server_content.model_turn.parts:
-
-                                    if part.inline_data:
-
-                                        audio_data = (
-                                            part.inline_data.data
-                                        )
-
-                                        if audio_data:
-                                            try:
-                                                audio_from_gemini.put_nowait(
-                                                    audio_data
-                                                )
-                                            except queue.Full:
-                                                pass
-
-                    except asyncio.TimeoutError:
-                        pass
+                await asyncio.gather(
+                    sender,
+                    receiver
+                )
 
         except Exception as e:
 
-            st.session_state["gemini_error"] = str(e)
+            st.session_state.gemini_error = str(e)
+
 
     asyncio.run(run())
 
 
-# =========================
-# تشغيل الاتصال
-# =========================
+# =========================================================
+# تشغيل Gemini مرة واحدة
+# =========================================================
 
-if "worker_started" not in st.session_state:
+if not st.session_state.gemini_started:
 
-    st.session_state.worker_started = False
-
-
-if not st.session_state.worker_started:
-
-    st.info(
-        "اضغط Start ثم اسمح للمتصفح باستخدام المايك."
-    )
-
-    st.session_state.worker_started = True
-
-    worker = threading.Thread(
-        target=gemini_worker,
+    thread = threading.Thread(
+        target=start_gemini,
         daemon=True
     )
 
-    worker.start()
+    thread.start()
 
 
-# =========================
+# =========================================================
 # واجهة المكالمة
-# =========================
+# =========================================================
 
 ctx = webrtc_streamer(
     key="gemini-live-call",
 
     mode=WebRtcMode.SENDRECV,
 
-    audio_processor_factory=AudioProcessor,
+    audio_processor_factory=GeminiAudioProcessor,
 
     media_stream_constraints={
         "audio": True,
@@ -258,27 +357,33 @@ ctx = webrtc_streamer(
 )
 
 
-# =========================
-# حالة المكالمة
-# =========================
+# =========================================================
+# الحالة
+# =========================================================
 
 if ctx.state.playing:
-    st.success("🟢 المكالمة متصلة — احچي وياي")
+
+    st.success(
+        "🟢 المكالمة شغالة — احچي ويا المساعد"
+    )
 
 else:
-    st.warning("🔴 اضغط Start لبدء المكالمة")
+
+    st.info(
+        "اضغط Start واسمح للمتصفح باستخدام المايك."
+    )
 
 
-# =========================
-# عرض حالة الخطأ
-# =========================
+# =========================================================
+# عرض الأخطاء
+# =========================================================
 
-if "gemini_error" in st.session_state:
+if st.session_state.gemini_error:
 
     st.error(
         "حدث خطأ في اتصال Gemini:"
     )
 
     st.code(
-        st.session_state["gemini_error"]
-                    )
+        st.session_state.gemini_error
+    )
